@@ -24,26 +24,36 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.example.pawberry.ui.components.DatePickerField
+import com.example.pawberry.ui.components.FormErrorText
 
 @Composable
 fun RegisterScreen(
+    errorMessage: String?,
     onRegister: (
         name: String,
         surname: String,
+        username: String,
         email: String,
         phoneNumber: String,
         dateOfBirth: String,
-    ) -> String?,
+        password: String,
+        confirmPassword: String,
+    ) -> Unit,
     onBackToLogin: () -> Unit,
+    onClearError: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var name by rememberSaveable { mutableStateOf("") }
     var surname by rememberSaveable { mutableStateOf("") }
+    var username by rememberSaveable { mutableStateOf("") }
     var email by rememberSaveable { mutableStateOf("") }
     var phoneNumber by rememberSaveable { mutableStateOf("") }
     var dateOfBirth by rememberSaveable { mutableStateOf("") }
-    var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    var password by rememberSaveable { mutableStateOf("") }
+    var confirmPassword by rememberSaveable { mutableStateOf("") }
 
     Column(
         modifier = modifier
@@ -70,7 +80,7 @@ fun RegisterScreen(
             value = name,
             onValueChange = {
                 name = it
-                errorMessage = null
+                onClearError()
             },
             label = { Text("Name") },
             singleLine = true,
@@ -81,7 +91,7 @@ fun RegisterScreen(
             value = surname,
             onValueChange = {
                 surname = it
-                errorMessage = null
+                onClearError()
             },
             label = { Text("Surname") },
             singleLine = true,
@@ -92,7 +102,7 @@ fun RegisterScreen(
             value = email,
             onValueChange = {
                 email = it
-                errorMessage = null
+                onClearError()
             },
             label = { Text("Email") },
             singleLine = true,
@@ -104,7 +114,7 @@ fun RegisterScreen(
             value = phoneNumber,
             onValueChange = {
                 phoneNumber = it
-                errorMessage = null
+                onClearError()
             },
             label = { Text("Phone Number") },
             singleLine = true,
@@ -112,36 +122,76 @@ fun RegisterScreen(
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(modifier = Modifier.height(12.dp))
-        OutlinedTextField(
+        DatePickerField(
+            label = "Date of Birth",
             value = dateOfBirth,
-            onValueChange = {
+            onDateSelected = {
                 dateOfBirth = it
-                errorMessage = null
+                onClearError()
             },
-            label = { Text("Date of Birth") },
-            placeholder = { Text("MM/DD/YYYY") },
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+        Text(
+            text = "Login details",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedTextField(
+            value = username,
+            onValueChange = {
+                username = it
+                onClearError()
+            },
+            label = { Text("Username") },
+            supportingText = { Text("You will use this to log in.") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedTextField(
+            value = password,
+            onValueChange = {
+                password = it
+                onClearError()
+            },
+            label = { Text("Password") },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedTextField(
+            value = confirmPassword,
+            onValueChange = {
+                confirmPassword = it
+                onClearError()
+            },
+            label = { Text("Confirm Password") },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            modifier = Modifier.fillMaxWidth(),
+        )
 
-        if (errorMessage != null) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = errorMessage.orEmpty(),
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
+        FormErrorText(message = errorMessage, modifier = Modifier.fillMaxWidth())
 
         Spacer(modifier = Modifier.height(24.dp))
         Button(
             onClick = {
-                val error = onRegister(name, surname, email, phoneNumber, dateOfBirth)
-                if (error == null) {
-                    onBackToLogin()
-                } else {
-                    errorMessage = error
-                }
+                onRegister(
+                    name,
+                    surname,
+                    username,
+                    email,
+                    phoneNumber,
+                    dateOfBirth,
+                    password,
+                    confirmPassword,
+                )
             },
             modifier = Modifier.fillMaxWidth(),
         ) {

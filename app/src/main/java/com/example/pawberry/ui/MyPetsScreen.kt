@@ -3,6 +3,7 @@ package com.example.pawberry.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,17 +14,23 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.pawberry.data.Pet
+import com.example.pawberry.R
+import com.example.pawberry.data.db.PetEntity
+import com.example.pawberry.util.formatDateForDisplay
 
 @Composable
 fun MyPetsScreen(
-    pets: List<Pet>,
+    pets: List<PetEntity>,
+    onPetClick: (Long) -> Unit,
     onAddPet: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -49,8 +56,8 @@ fun MyPetsScreen(
                 )
             }
         } else {
-            items(pets, key = { it.id }) { pet ->
-                PetCard(pet = pet)
+            items(pets, key = { it.petId }) { pet ->
+                PetCard(pet = pet, onClick = { onPetClick(pet.petId) })
             }
         }
 
@@ -67,24 +74,38 @@ fun MyPetsScreen(
 }
 
 @Composable
-private fun PetCard(pet: Pet) {
+private fun PetCard(pet: PetEntity, onClick: () -> Unit) {
     Card(
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-        ),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = pet.name,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = pet.breed,
-                style = MaterialTheme.typography.bodyLarge,
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = pet.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = pet.breed,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Text(
+                    text = "Born ${formatDateForDisplay(pet.dateOfBirth)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                )
+            }
+            Icon(
+                painter = painterResource(R.drawable.ic_chevron_right),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
             )
         }
     }

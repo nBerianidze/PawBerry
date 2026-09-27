@@ -32,13 +32,14 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun LoginScreen(
-    onLogin: (username: String, password: String) -> String?,
+    errorMessage: String?,
+    onLogin: (username: String, password: String) -> Unit,
     onSignUp: () -> Unit,
+    onClearError: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var username by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
-    var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
 
     Column(
         modifier = modifier
@@ -71,7 +72,7 @@ fun LoginScreen(
             value = username,
             onValueChange = {
                 username = it
-                errorMessage = null
+                onClearError()
             },
             label = { Text("Username") },
             singleLine = true,
@@ -82,7 +83,7 @@ fun LoginScreen(
             value = password,
             onValueChange = {
                 password = it
-                errorMessage = null
+                onClearError()
             },
             label = { Text("Password") },
             singleLine = true,
@@ -107,9 +108,7 @@ fun LoginScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Button(
-                onClick = {
-                    errorMessage = onLogin(username, password)
-                },
+                onClick = { onLogin(username, password) },
                 modifier = Modifier.weight(1f),
             ) {
                 Text("Login")

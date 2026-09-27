@@ -1,38 +1,30 @@
 package com.example.pawberry.ui
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-
-private data class ReminderPreview(
-    val title: String,
-    val description: String,
-)
-
-private val upcomingReminderTypes = listOf(
-    ReminderPreview("Vaccinations", "Keep immunization dates on track."),
-    ReminderPreview("Medications", "Track daily or weekly medicine."),
-    ReminderPreview("Deworming", "Schedule regular deworming care."),
-    ReminderPreview("Flea and tick treatments", "Stay ahead of parasites."),
-    ReminderPreview("Feeding", "Set meal times for each pet."),
-    ReminderPreview("Other pet-care tasks", "Add grooming, walks, and more."),
-)
+import com.example.pawberry.data.db.ReminderWithPet
+import com.example.pawberry.ui.components.ReminderCard
 
 @Composable
-fun RemindersScreen(modifier: Modifier = Modifier) {
+fun RemindersScreen(
+    reminders: List<ReminderWithPet>,
+    onCompletedChange: (reminderId: Long, completed: Boolean) -> Unit,
+    onAddReminder: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
@@ -46,31 +38,33 @@ fun RemindersScreen(modifier: Modifier = Modifier) {
                 color = MaterialTheme.colorScheme.primary,
             )
         }
-        item {
-            Text(
-                text = "Pet-care reminders will live here. This first version shows the types of tasks you will be able to manage later.",
-                style = MaterialTheme.typography.bodyLarge,
-            )
+
+        if (reminders.isEmpty()) {
+            item {
+                Text(
+                    text = "No reminders yet. Add one to start tracking pet care.",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
+        } else {
+            items(reminders, key = { it.reminder.reminderId }) { item ->
+                ReminderCard(
+                    reminder = item.reminder,
+                    petName = item.petName,
+                    onCompletedChange = { completed ->
+                        onCompletedChange(item.reminder.reminderId, completed)
+                    },
+                )
+            }
         }
-        items(upcomingReminderTypes) { reminder ->
-            Card(
+
+        item {
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = onAddReminder,
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = reminder.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = reminder.description,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
+                Text("Add Reminder")
             }
         }
     }
