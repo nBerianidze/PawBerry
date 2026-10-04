@@ -1,7 +1,9 @@
 package com.example.pawberry
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -11,7 +13,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
@@ -72,10 +76,20 @@ fun PawBerryApp(
                                 }
                             },
                             icon = {
-                                Icon(
-                                    painter = painterResource(item.icon),
-                                    contentDescription = item.label,
-                                )
+                                if (item.tintIcon) {
+                                    Icon(
+                                        painter = painterResource(item.icon),
+                                        contentDescription = item.label,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                } else {
+                                    Image(
+                                        painter = painterResource(item.icon),
+                                        contentDescription = item.label,
+                                        modifier = Modifier.size(24.dp),
+                                        contentScale = ContentScale.Fit,
+                                    )
+                                }
                             },
                             label = { Text(item.label) },
                         )
@@ -87,7 +101,9 @@ fun PawBerryApp(
         NavHost(
             navController = navController,
             startDestination = Routes.LOGIN,
-            modifier = Modifier.padding(innerPadding),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
         ) {
             composable(Routes.LOGIN) {
                 LoginScreen(

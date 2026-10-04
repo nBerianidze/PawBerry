@@ -58,11 +58,16 @@ fun RegisterScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .imePadding()
-            .padding(horizontal = 24.dp, vertical = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .imePadding(),
     ) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
         Text(
             text = "Create account",
             style = MaterialTheme.typography.headlineMedium,
@@ -199,6 +204,8 @@ fun RegisterScreen(
         }
         TextButton(onClick = onBackToLogin) {
             Text("Back to Login")
+        }
+        Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }

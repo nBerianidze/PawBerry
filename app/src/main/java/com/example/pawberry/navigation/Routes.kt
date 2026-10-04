@@ -45,8 +45,10 @@ enum class BottomNavItem(
     val route: String,
     val label: String,
     val icon: Int,
+    /** False for artwork that already carries its own colours and must not be tinted. */
+    val tintIcon: Boolean = true,
 ) {
-    HOME(Routes.HOME, "Home", R.drawable.ic_home),
+    HOME(Routes.HOME, "Home", R.drawable.home_icon, tintIcon = false),
     MY_PETS(Routes.MY_PETS, "My Pets", R.drawable.ic_pets),
     REMINDERS(Routes.REMINDERS, "Reminders", R.drawable.ic_reminders),
 }
