@@ -21,8 +21,10 @@ import com.example.pawberry.ui.components.ReminderCard
 @Composable
 fun RemindersScreen(
     reminders: List<ReminderWithPet>,
-    onCompletedChange: (reminderId: Long, completed: Boolean) -> Unit,
+    onCompletedChange: (reminderId: String, completed: Boolean) -> Unit,
+    onDeleteReminder: (reminderId: String, title: String) -> Unit,
     onAddReminder: () -> Unit,
+    isBusy: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -54,6 +56,8 @@ fun RemindersScreen(
                     onCompletedChange = { completed ->
                         onCompletedChange(item.reminder.reminderId, completed)
                     },
+                    onDelete = { onDeleteReminder(item.reminder.reminderId, item.reminder.title) },
+                    deleteEnabled = !isBusy,
                 )
             }
         }

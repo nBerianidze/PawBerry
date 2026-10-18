@@ -22,6 +22,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -375,4 +376,100 @@ fun FormErrorText(message: String?, modifier: Modifier = Modifier) {
         style = MaterialTheme.typography.bodyMedium,
         modifier = modifier.padding(top = 12.dp),
     )
+}
+
+@Composable
+fun ConfirmDialog(
+    title: String,
+    message: String,
+    confirmLabel: String = "Delete",
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(message) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(confirmLabel, color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
+}
+
+@Composable
+fun SearchablePickerField(
+    label: String,
+    options: List<String>,
+    selected: String,
+    onSelected: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = "Select",
+) {
+    var showDialog by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+
+    SelectorField(
+        label = label,
+        value = selected.ifBlank { placeholder },
+        trailingIcon = R.drawable.ic_arrow_drop_down,
+        onClick = {
+            query = ""
+            showDialog = true
+        },
+        modifier = modifier,
+    )
+
+    if (showDialog) {
+        val filtered = remember(query, options) {
+            if (query.isBlank()) {
+                options
+            } else {
+                options.filter { it.contains(query, ignoreCase = true) }
+            }
+        }
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text(label) },
+            text = {
+                Column {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        label = { Text("Search") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyColumn(modifier = Modifier.height(280.dp)) {
+                        items(filtered, key = { it }) { option ->
+                            Text(
+                                text = option,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        onSelected(option)
+                                        showDialog = false
+                                    }
+                                    .padding(vertical = 12.dp, horizontal = 4.dp),
+                                fontWeight = if (option == selected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (option == selected) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showDialog = false }) { Text("Close") }
+            },
+        )
+    }
 }

@@ -1,6 +1,7 @@
 package com.example.pawberry.data
 
-import android.database.sqlite.SQLiteConstraintException
+import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -8,66 +9,57 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.pawberry.PawBerryApplication
 import com.example.pawberry.data.db.PetEntity
-import com.example.pawberry.data.db.ReminderEntity
 import com.example.pawberry.data.db.ReminderWithPet
 import com.example.pawberry.data.db.UserEntity
+import com.example.pawberry.data.model.RecurrenceRule
 import com.example.pawberry.data.model.ReminderCategory
-import com.example.pawberry.data.model.RepeatFrequency
+import com.example.pawberry.data.remote.ApiConfig
+import com.example.pawberry.data.remote.BackendConnectionState
+import com.example.pawberry.data.remote.BaseUrlInterceptor
+import com.example.pawberry.data.remote.SessionStore
+import com.example.pawberry.data.remote.toUserMessage
 import com.example.pawberry.data.repository.PetRepository
 import com.example.pawberry.data.repository.ReminderRepository
 import com.example.pawberry.data.repository.UserRepository
-import com.example.pawberry.data.security.PasswordHasher
-import kotlinx.coroutines.ExperimentalCoroutinesApi
+import com.example.pawberry.notifications.ReminderScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/**
- * Single source of truth for the signed-in session. Every screen reads from the
- * [StateFlow]s exposed here, which are backed by Room queries, so a write made on one
- * screen shows up on all the others without any manual refresh.
- */
-@OptIn(ExperimentalCoroutinesApi::class)
 class PawBerryViewModel(
     private val userRepository: UserRepository,
     private val petRepository: PetRepository,
     private val reminderRepository: ReminderRepository,
+    private val sessionStore: SessionStore,
+    private val reminderScheduler: ReminderScheduler,
+    private val baseUrlInterceptor: BaseUrlInterceptor,
 ) : ViewModel() {
 
-    private val currentUserId = MutableStateFlow<Long?>(null)
+    private val _currentUser = MutableStateFlow<UserEntity?>(null)
+    val currentUser: StateFlow<UserEntity?> = _currentUser.asStateFlow()
 
-    /**
-     * Validation message for whichever form is currently on screen. Only one form is
-     * ever visible at a time, so a single field keeps the plumbing simple.
-     */
+    private val _pets = MutableStateFlow<List<PetEntity>>(emptyList())
+    val pets: StateFlow<List<PetEntity>> = _pets.asStateFlow()
+
+    private val _reminders = MutableStateFlow<List<ReminderWithPet>>(emptyList())
+    val reminders: StateFlow<List<ReminderWithPet>> = _reminders.asStateFlow()
+
     private val _formError = MutableStateFlow<String?>(null)
     val formError: StateFlow<String?> = _formError.asStateFlow()
 
-    val currentUser: StateFlow<UserEntity?> = currentUserId
-        .flatMapLatest { id ->
-            if (id == null) flowOf(null) else userRepository.observeById(id)
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
+    private val _userMessage = MutableStateFlow<String?>(null)
+    val userMessage: StateFlow<String?> = _userMessage.asStateFlow()
 
-    val pets: StateFlow<List<PetEntity>> = currentUserId
-        .flatMapLatest { id ->
-            if (id == null) flowOf(emptyList()) else petRepository.observeByUser(id)
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
+    private val _isBusy = MutableStateFlow(false)
+    val isBusy: StateFlow<Boolean> = _isBusy.asStateFlow()
 
-    val reminders: StateFlow<List<ReminderWithPet>> = currentUserId
-        .flatMapLatest { id ->
-            if (id == null) flowOf(emptyList()) else reminderRepository.observeForUser(id)
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
+    private val _backendStatus = MutableStateFlow<BackendConnectionState>(BackendConnectionState.Checking)
+    val backendStatus: StateFlow<BackendConnectionState> = _backendStatus.asStateFlow()
 
-    /** The next three reminders that have not been ticked off yet, for the Home screen. */
     val upcomingReminders: StateFlow<List<ReminderWithPet>> = reminders
         .map { all -> all.filterNot { it.reminder.isCompleted }.take(HOME_REMINDER_COUNT) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
@@ -80,11 +72,29 @@ class PawBerryViewModel(
         .map { it?.username.orEmpty() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), "")
 
+    fun imageBaseUrl(): String = baseUrlInterceptor.currentBaseUrl()
+
     fun clearFormError() {
         _formError.value = null
     }
 
-    // ---------------------------------------------------------------- authentication
+    fun clearUserMessage() {
+        _userMessage.value = null
+    }
+
+    fun checkBackendConnection() {
+        viewModelScope.launch {
+            _backendStatus.value = BackendConnectionState.Checking
+            try {
+                val message = userRepository.checkHealth()
+                Log.i(ApiConfig.LOG_TAG, "GET / reachable: $message")
+                _backendStatus.value = BackendConnectionState.Reachable(message)
+            } catch (error: Exception) {
+                Log.e(ApiConfig.LOG_TAG, "GET / failed: ${error.javaClass.simpleName}")
+                _backendStatus.value = BackendConnectionState.Unreachable(error.toUserMessage())
+            }
+        }
+    }
 
     fun login(username: String, password: String, onSuccess: () -> Unit) {
         val trimmedUsername = username.trim()
@@ -93,15 +103,17 @@ class PawBerryViewModel(
             return
         }
 
-        viewModelScope.launch {
-            val user = userRepository.getByUsername(trimmedUsername)
-            if (user == null || !PasswordHasher.verify(password, user.passwordHash)) {
-                _formError.value = "Incorrect username or password."
-                return@launch
+        runRequest {
+            try {
+                val response = userRepository.login(trimmedUsername, password)
+                sessionStore.token = response.token
+                refreshSession()
+                _formError.value = null
+                onSuccess()
+            } catch (error: Exception) {
+                sessionStore.clear()
+                _formError.value = error.toUserMessage()
             }
-            _formError.value = null
-            currentUserId.value = user.userId
-            onSuccess()
         }
     }
 
@@ -143,123 +155,150 @@ class PawBerryViewModel(
             return
         }
 
-        viewModelScope.launch {
-            if (userRepository.getByUsername(trimmedUsername) != null) {
-                _formError.value = "That username is already taken."
-                return@launch
-            }
-            if (userRepository.getByEmail(trimmedEmail) != null) {
-                _formError.value = "An account already uses that email address."
-                return@launch
-            }
-
+        runRequest {
             try {
-                userRepository.insert(
-                    UserEntity(
-                        name = name.trim(),
-                        surname = surname.trim(),
-                        username = trimmedUsername,
-                        email = trimmedEmail,
-                        phoneNumber = phoneNumber.trim(),
-                        dateOfBirth = dateOfBirth.trim(),
-                        passwordHash = PasswordHasher.hash(password),
-                    )
+                userRepository.register(
+                    firstName = name.trim(),
+                    lastName = surname.trim(),
+                    username = trimmedUsername,
+                    email = trimmedEmail,
+                    phone = phoneNumber.trim(),
+                    dateOfBirth = dateOfBirth.trim(),
+                    password = password,
                 )
-            } catch (_: SQLiteConstraintException) {
-                // The unique indexes on username/email are the final word on duplicates.
-                _formError.value = "That username or email is already registered."
-                return@launch
+                sessionStore.clear()
+                _formError.value = null
+                onSuccess()
+            } catch (error: Exception) {
+                _formError.value = error.toUserMessage()
             }
-            _formError.value = null
-            onSuccess()
         }
     }
 
     fun logout() {
-        currentUserId.value = null
+        sessionStore.clear()
+        reminderScheduler.sync(emptyList())
+        _currentUser.value = null
+        _pets.value = emptyList()
+        _reminders.value = emptyList()
         _formError.value = null
     }
 
-    // ------------------------------------------------------------------------- pets
-
     fun addPet(
         name: String,
+        species: String,
         breed: String,
         dateOfBirth: String,
         favoriteToy: String,
+        gender: String,
+        imageUri: Uri?,
         onSuccess: () -> Unit,
     ) {
-        val ownerId = currentUserId.value
-        if (ownerId == null) {
+        if (_currentUser.value == null) {
             _formError.value = "Please log in again."
             return
         }
-        if (!validatePetFields(name, breed, dateOfBirth, favoriteToy)) return
+        if (!validatePetFields(name, species, breed, dateOfBirth, favoriteToy, gender)) return
 
-        viewModelScope.launch {
-            petRepository.insert(
-                PetEntity(
-                    userId = ownerId,
+        runRequest {
+            try {
+                petRepository.insert(
                     name = name.trim(),
+                    species = species.trim(),
                     breed = breed.trim(),
                     dateOfBirth = dateOfBirth.trim(),
                     favoriteToy = favoriteToy.trim(),
+                    gender = gender.trim(),
+                    imageUri = imageUri,
+                    existingImage = "",
                 )
-            )
-            _formError.value = null
-            onSuccess()
+                refreshPetsAndReminders()
+                _formError.value = null
+                _userMessage.value = "Pet saved."
+                onSuccess()
+            } catch (error: Exception) {
+                _formError.value = error.toUserMessage()
+            }
         }
     }
 
     fun updatePet(
         pet: PetEntity,
         name: String,
+        species: String,
         breed: String,
         dateOfBirth: String,
         favoriteToy: String,
+        gender: String,
+        imageUri: Uri?,
         onSuccess: () -> Unit,
     ) {
-        if (!validatePetFields(name, breed, dateOfBirth, favoriteToy)) return
+        if (!validatePetFields(name, species, breed, dateOfBirth, favoriteToy, gender)) return
 
-        viewModelScope.launch {
-            petRepository.update(
-                pet.copy(
-                    name = name.trim(),
-                    breed = breed.trim(),
-                    dateOfBirth = dateOfBirth.trim(),
-                    favoriteToy = favoriteToy.trim(),
+        runRequest {
+            try {
+                petRepository.update(
+                    pet.copy(
+                        name = name.trim(),
+                        species = species.trim(),
+                        breed = breed.trim(),
+                        dateOfBirth = dateOfBirth.trim(),
+                        favoriteToy = favoriteToy.trim(),
+                        gender = gender.trim(),
+                    ),
+                    imageUri = imageUri,
                 )
-            )
-            _formError.value = null
-            onSuccess()
+                refreshPetsAndReminders()
+                _formError.value = null
+                _userMessage.value = "Pet updated."
+                onSuccess()
+            } catch (error: Exception) {
+                _formError.value = error.toUserMessage()
+            }
+        }
+    }
+
+    fun deletePet(pet: PetEntity, onSuccess: () -> Unit) {
+        runRequest {
+            try {
+                petRepository.delete(pet.petId)
+                refreshPetsAndReminders()
+                _userMessage.value = "${pet.name} was deleted."
+                onSuccess()
+            } catch (error: Exception) {
+                _formError.value = error.toUserMessage()
+                _userMessage.value = error.toUserMessage()
+            }
         }
     }
 
     private fun validatePetFields(
         name: String,
+        species: String,
         breed: String,
         dateOfBirth: String,
         favoriteToy: String,
+        gender: String,
     ): Boolean {
-        if (name.isBlank() || breed.isBlank() || dateOfBirth.isBlank() || favoriteToy.isBlank()) {
+        if (name.isBlank() || species.isBlank() || breed.isBlank() ||
+            dateOfBirth.isBlank() || favoriteToy.isBlank() || gender.isBlank()
+        ) {
             _formError.value = "Please fill in all pet fields."
             return false
         }
         return true
     }
 
-    // -------------------------------------------------------------------- reminders
-
     fun addReminder(
-        petId: Long?,
+        petId: String?,
         title: String,
         category: ReminderCategory,
         dueDate: String,
         dueTime: String,
-        repeatFrequency: RepeatFrequency,
+        recurrence: RecurrenceRule,
         onSuccess: () -> Unit,
     ) {
-        if (petId == null) {
+        if (petId.isNullOrBlank()) {
             _formError.value = "Please choose a pet for this reminder."
             return
         }
@@ -271,44 +310,92 @@ class PawBerryViewModel(
             _formError.value = "Please choose a due date and time."
             return
         }
+        if (recurrence.interval < 1) {
+            _formError.value = "Repeat interval must be at least 1."
+            return
+        }
+        if (recurrence.endsOnDate) {
+            if (recurrence.endDate.isBlank()) {
+                _formError.value = "Please choose an end date, or repeat indefinitely."
+                return
+            }
+            if (recurrence.endDate < dueDate) {
+                _formError.value = "The end date cannot be earlier than the reminder date."
+                return
+            }
+        }
 
-        viewModelScope.launch {
-            reminderRepository.insert(
-                ReminderEntity(
+        runRequest {
+            try {
+                reminderRepository.insert(
                     petId = petId,
                     title = title.trim(),
-                    category = category.name,
+                    category = category,
                     dueDate = dueDate,
                     dueTime = dueTime,
-                    repeatFrequency = repeatFrequency.name,
+                    recurrence = recurrence,
                 )
-            )
-            _formError.value = null
-            onSuccess()
+                refreshPetsAndReminders()
+                _formError.value = null
+                _userMessage.value = "Reminder saved."
+                onSuccess()
+            } catch (error: Exception) {
+                _formError.value = error.toUserMessage()
+            }
         }
     }
 
-    /**
-     * Ticks a reminder off (or back on). The first time a reminder is completed the user
-     * earns [POINTS_PER_COMPLETED_REMINDER]; `pointsAwarded` makes sure un-checking and
-     * re-checking it cannot farm more points.
-     */
-    fun setReminderCompleted(reminderId: Long, completed: Boolean) {
+    fun setReminderCompleted(reminderId: String, completed: Boolean) {
         viewModelScope.launch {
-            val reminder = reminderRepository.getById(reminderId) ?: return@launch
-            val shouldAwardPoints = completed && !reminder.pointsAwarded
+            try {
+                reminderRepository.setCompleted(reminderId, completed)
+                refreshPetsAndReminders()
+                refreshProfile()
+            } catch (error: Exception) {
+                _formError.value = error.toUserMessage()
+                _userMessage.value = error.toUserMessage()
+            }
+        }
+    }
 
-            reminderRepository.update(
-                reminder.copy(
-                    isCompleted = completed,
-                    pointsAwarded = reminder.pointsAwarded || completed,
-                )
-            )
+    fun deleteReminder(reminderId: String, title: String) {
+        runRequest {
+            try {
+                reminderRepository.delete(reminderId)
+                refreshPetsAndReminders()
+                _userMessage.value = "Deleted \"$title\"."
+            } catch (error: Exception) {
+                _userMessage.value = error.toUserMessage()
+            }
+        }
+    }
 
-            if (shouldAwardPoints) {
-                currentUserId.value?.let { userId ->
-                    userRepository.addRewardPoints(userId, POINTS_PER_COMPLETED_REMINDER)
-                }
+    private suspend fun refreshSession() {
+        val points = userRepository.getRewardPoints()
+        _currentUser.value = userRepository.getProfile(points)
+        refreshPetsAndReminders()
+    }
+
+    private suspend fun refreshProfile() {
+        val points = userRepository.getRewardPoints()
+        _currentUser.value = userRepository.getProfile(points)
+    }
+
+    private suspend fun refreshPetsAndReminders() {
+        _pets.value = petRepository.getAll()
+        val loaded = reminderRepository.getAll()
+        _reminders.value = loaded
+        reminderScheduler.sync(loaded)
+    }
+
+    private fun runRequest(block: suspend () -> Unit) {
+        if (_isBusy.value) return
+        viewModelScope.launch {
+            _isBusy.value = true
+            try {
+                block()
+            } finally {
+                _isBusy.value = false
             }
         }
     }
@@ -328,6 +415,9 @@ class PawBerryViewModel(
                     userRepository = application.userRepository,
                     petRepository = application.petRepository,
                     reminderRepository = application.reminderRepository,
+                    sessionStore = application.sessionStore,
+                    reminderScheduler = application.reminderScheduler,
+                    baseUrlInterceptor = application.baseUrlInterceptor,
                 )
             }
         }

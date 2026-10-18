@@ -1,20 +1,48 @@
 package com.example.pawberry.data.repository
 
-import com.example.pawberry.data.db.ReminderDao
-import com.example.pawberry.data.db.ReminderEntity
 import com.example.pawberry.data.db.ReminderWithPet
-import kotlinx.coroutines.flow.Flow
+import com.example.pawberry.data.model.RecurrenceRule
+import com.example.pawberry.data.model.ReminderCategory
+import com.example.pawberry.data.remote.CreateReminderRequest
+import com.example.pawberry.data.remote.PawBerryApi
+import com.example.pawberry.data.remote.UpdateReminderRequest
+import com.example.pawberry.data.remote.toDto
+import com.example.pawberry.data.remote.toLegacyRepeat
+import com.example.pawberry.data.remote.toReminderWithPet
 
-class ReminderRepository(private val reminderDao: ReminderDao) {
-    suspend fun insert(reminder: ReminderEntity): Long = reminderDao.insert(reminder)
+class ReminderRepository(private val api: PawBerryApi) {
+    suspend fun getAll(): List<ReminderWithPet> = api.getReminders().map { it.toReminderWithPet() }
 
-    suspend fun getById(reminderId: Long): ReminderEntity? = reminderDao.getById(reminderId)
+    suspend fun insert(
+        petId: String,
+        title: String,
+        category: ReminderCategory,
+        dueDate: String,
+        dueTime: String,
+        recurrence: RecurrenceRule,
+    ): ReminderWithPet = api.createReminder(
+        CreateReminderRequest(
+            pet = petId,
+            title = title,
+            type = category.toApi(),
+            date = dueDate.ifBlank { null },
+            time = dueTime,
+            repeat = recurrence.toLegacyRepeat(),
+            recurrence = recurrence.toDto(),
+        )
+    ).toReminderWithPet()
 
-    suspend fun update(reminder: ReminderEntity) = reminderDao.update(reminder)
+    suspend fun complete(reminderId: String): ReminderWithPet =
+        api.completeReminder(reminderId).toReminderWithPet()
 
-    fun observeForUser(userId: Long): Flow<List<ReminderWithPet>> =
-        reminderDao.observeForUser(userId)
+    suspend fun setCompleted(reminderId: String, completed: Boolean): ReminderWithPet =
+        if (completed) {
+            complete(reminderId)
+        } else {
+            api.updateReminder(reminderId, UpdateReminderRequest(completed = false)).toReminderWithPet()
+        }
 
-    fun observeForPetAndCategory(petId: Long, category: String): Flow<List<ReminderEntity>> =
-        reminderDao.observeForPetAndCategory(petId, category)
+    suspend fun delete(reminderId: String) {
+        api.deleteReminder(reminderId)
+    }
 }

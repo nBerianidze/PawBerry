@@ -29,10 +29,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.pawberry.data.remote.BackendConnectionState
 
 @Composable
 fun LoginScreen(
     errorMessage: String?,
+    backendStatus: BackendConnectionState,
+    isBusy: Boolean,
     onLogin: (username: String, password: String) -> Unit,
     onSignUp: () -> Unit,
     onClearError: () -> Unit,
@@ -109,16 +112,33 @@ fun LoginScreen(
         ) {
             Button(
                 onClick = { onLogin(username, password) },
+                enabled = !isBusy,
                 modifier = Modifier.weight(1f),
             ) {
-                Text("Login")
+                Text(if (isBusy) "Signing in…" else "Login")
             }
             OutlinedButton(
                 onClick = onSignUp,
+                enabled = !isBusy,
                 modifier = Modifier.weight(1f),
             ) {
                 Text("Sign Up")
             }
         }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            text = when (backendStatus) {
+                BackendConnectionState.Checking -> "Checking backend…"
+                is BackendConnectionState.Reachable -> backendStatus.message
+                is BackendConnectionState.Unreachable -> backendStatus.reason
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = when (backendStatus) {
+                is BackendConnectionState.Unreachable -> MaterialTheme.colorScheme.error
+                else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            },
+            textAlign = TextAlign.Center,
+        )
     }
 }

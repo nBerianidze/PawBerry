@@ -14,7 +14,11 @@ enum class ReminderCategory(
     DEWORMING("Deworming", "Deworming"),
     FLEA_TICK("Flea & Tick", "Flea & Tick Treatments"),
     FEEDING("Feeding", "Feeding"),
+    VET_APPOINTMENT("Vet Appointment", "Vet Appointments"),
+    GROOMING("Grooming", "Grooming"),
     OTHER("Other", "Other");
+
+    fun toApi(): String = label
 
     companion object {
         /** Categories shown as clickable sections on the pet profile. */
@@ -22,5 +26,8 @@ enum class ReminderCategory(
 
         fun fromStored(value: String): ReminderCategory =
             entries.firstOrNull { it.name == value } ?: OTHER
+
+        fun fromApi(value: String?): ReminderCategory =
+            entries.firstOrNull { it.label.equals(value, ignoreCase = true) } ?: OTHER
     }
 }

@@ -13,27 +13,27 @@ object Routes {
     const val PET_ID_ARG = "petId"
     const val CATEGORY_ARG = "category"
 
-    /** Pet detail, e.g. `pet_profile/4`. */
+    /** Pet detail, e.g. `pet_profile/64f...`. */
     const val PET_PROFILE = "pet_profile/{$PET_ID_ARG}"
-    fun petProfile(petId: Long) = "pet_profile/$petId"
+    fun petProfile(petId: String) = "pet_profile/$petId"
 
-    /** Edit form for an existing pet, e.g. `edit_pet/4`. */
+    /** Edit form for an existing pet. */
     const val EDIT_PET = "edit_pet/{$PET_ID_ARG}"
-    fun editPet(petId: Long) = "edit_pet/$petId"
+    fun editPet(petId: String) = "edit_pet/$petId"
 
     /**
-     * Treatment history for one category of one pet, e.g. `pet_category/4/VACCINATION`.
+     * Treatment history for one category of one pet.
      * The category travels as the enum name so it is always URL safe.
      */
     const val PET_CATEGORY = "pet_category/{$PET_ID_ARG}/{$CATEGORY_ARG}"
-    fun petCategory(petId: Long, category: String) = "pet_category/$petId/$category"
+    fun petCategory(petId: String, category: String) = "pet_category/$petId/$category"
 
     /**
      * New reminder form. Both arguments are optional: opening it from a pet's category
      * screen pre-selects that pet and category, opening it from Reminders does not.
      */
     const val ADD_REMINDER = "add_reminder?$PET_ID_ARG={$PET_ID_ARG}&$CATEGORY_ARG={$CATEGORY_ARG}"
-    fun addReminder(petId: Long? = null, category: String? = null): String =
+    fun addReminder(petId: String? = null, category: String? = null): String =
         if (petId == null || category == null) {
             "add_reminder"
         } else {

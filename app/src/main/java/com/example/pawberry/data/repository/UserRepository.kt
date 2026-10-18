@@ -1,20 +1,48 @@
 package com.example.pawberry.data.repository
 
-import com.example.pawberry.data.db.UserDao
 import com.example.pawberry.data.db.UserEntity
-import kotlinx.coroutines.flow.Flow
+import com.example.pawberry.data.remote.AuthResponse
+import com.example.pawberry.data.remote.BackendLocator
+import com.example.pawberry.data.remote.LoginRequest
+import com.example.pawberry.data.remote.PawBerryApi
+import com.example.pawberry.data.remote.RegisterRequest
+import com.example.pawberry.data.remote.toEntity
 
-class UserRepository(private val userDao: UserDao) {
-    suspend fun insert(user: UserEntity): Long = userDao.insert(user)
+class UserRepository(
+    private val api: PawBerryApi,
+    private val backendLocator: BackendLocator,
+) {
+    suspend fun checkHealth(): String = backendLocator.locate()
 
-    suspend fun update(user: UserEntity) = userDao.update(user)
+    suspend fun login(username: String, password: String): AuthResponse {
+        backendLocator.locate()
+        return api.login(LoginRequest(username = username, password = password))
+    }
 
-    suspend fun getByUsername(username: String): UserEntity? = userDao.getByUsername(username)
+    suspend fun register(
+        firstName: String,
+        lastName: String,
+        username: String,
+        email: String,
+        phone: String,
+        dateOfBirth: String,
+        password: String,
+    ): AuthResponse {
+        backendLocator.locate()
+        return api.register(
+            RegisterRequest(
+                firstName = firstName,
+                lastName = lastName,
+                username = username,
+                email = email,
+                phone = phone,
+                dateOfBirth = dateOfBirth.ifBlank { null },
+                password = password,
+            )
+        )
+    }
 
-    suspend fun getByEmail(email: String): UserEntity? = userDao.getByEmail(email)
+    suspend fun getProfile(rewardPoints: Int): UserEntity = api.getMe().toEntity(rewardPoints)
 
-    fun observeById(userId: Long): Flow<UserEntity?> = userDao.observeById(userId)
-
-    suspend fun addRewardPoints(userId: Long, points: Int) =
-        userDao.addRewardPoints(userId, points)
+    suspend fun getRewardPoints(): Int = api.getRewards().points
 }

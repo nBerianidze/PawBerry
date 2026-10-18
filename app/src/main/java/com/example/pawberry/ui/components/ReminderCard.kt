@@ -9,7 +9,12 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -21,19 +26,17 @@ import com.example.pawberry.data.model.RepeatFrequency
 import com.example.pawberry.util.formatDateForDisplay
 import com.example.pawberry.util.formatTimeForDisplay
 
-/**
- * One reminder row. Used on both the Reminders tab and a pet's category history, so the
- * completion checkbox behaves identically in both places.
- */
 @Composable
 fun ReminderCard(
     reminder: ReminderEntity,
     petName: String?,
     onCompletedChange: (Boolean) -> Unit,
+    onDelete: (() -> Unit)? = null,
+    deleteEnabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val category = ReminderCategory.fromStored(reminder.category)
-    val repeat = RepeatFrequency.fromStored(reminder.repeatFrequency)
+    var confirmDelete by remember { mutableStateOf(false) }
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -72,9 +75,9 @@ fun ReminderCard(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 )
-                if (repeat != RepeatFrequency.NONE) {
+                if (reminder.recurrence.frequency != RepeatFrequency.NONE) {
                     Text(
-                        text = "Repeats: ${repeat.label}",
+                        text = "Repeats: ${reminder.recurrence.describe()}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     )
@@ -88,11 +91,31 @@ fun ReminderCard(
                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                     },
                 )
+                if (onDelete != null) {
+                    TextButton(
+                        onClick = { confirmDelete = true },
+                        enabled = deleteEnabled,
+                    ) {
+                        Text("Delete")
+                    }
+                }
             }
             Checkbox(
                 checked = reminder.isCompleted,
                 onCheckedChange = onCompletedChange,
             )
         }
+    }
+
+    if (confirmDelete) {
+        ConfirmDialog(
+            title = "Delete reminder?",
+            message = "Delete \"${reminder.title}\"? This cannot be undone.",
+            onConfirm = {
+                confirmDelete = false
+                onDelete?.invoke()
+            },
+            onDismiss = { confirmDelete = false },
+        )
     }
 }

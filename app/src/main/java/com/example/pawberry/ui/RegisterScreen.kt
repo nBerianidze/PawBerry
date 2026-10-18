@@ -44,6 +44,7 @@ fun RegisterScreen(
     ) -> Unit,
     onBackToLogin: () -> Unit,
     onClearError: () -> Unit,
+    isBusy: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     var name by rememberSaveable { mutableStateOf("") }
@@ -198,9 +199,10 @@ fun RegisterScreen(
                     confirmPassword,
                 )
             },
+            enabled = !isBusy,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Register")
+            Text(if (isBusy) "Creating account…" else "Register")
         }
         TextButton(onClick = onBackToLogin) {
             Text("Back to Login")

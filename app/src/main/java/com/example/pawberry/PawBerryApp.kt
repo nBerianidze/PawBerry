@@ -8,10 +8,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -47,19 +50,36 @@ fun PawBerryApp(
     val currentRoute = navBackStackEntry?.destination?.route
     val showBottomBar = BottomNavItem.entries.any { it.route == currentRoute }
 
-    // One observed copy of the database state, shared by every screen below.
+    // One observed copy of backend-backed session state, shared by every screen below.
     val username by viewModel.username.collectAsStateWithLifecycle()
     val pets by viewModel.pets.collectAsStateWithLifecycle()
     val reminders by viewModel.reminders.collectAsStateWithLifecycle()
     val upcomingReminders by viewModel.upcomingReminders.collectAsStateWithLifecycle()
     val rewardPoints by viewModel.rewardPoints.collectAsStateWithLifecycle()
     val formError by viewModel.formError.collectAsStateWithLifecycle()
+    val isBusy by viewModel.isBusy.collectAsStateWithLifecycle()
+    val backendStatus by viewModel.backendStatus.collectAsStateWithLifecycle()
+    val userMessage by viewModel.userMessage.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val imageBaseUrl = viewModel.imageBaseUrl()
+
+    LaunchedEffect(userMessage) {
+        val message = userMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(message)
+        viewModel.clearUserMessage()
+    }
 
     // The error belongs to whichever form is on screen, so leaving a screen clears it.
-    LaunchedEffect(currentRoute) { viewModel.clearFormError() }
+    LaunchedEffect(currentRoute) {
+        viewModel.clearFormError()
+        if (currentRoute == Routes.LOGIN) {
+            viewModel.checkBackendConnection()
+        }
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             if (showBottomBar) {
                 NavigationBar {
@@ -108,6 +128,8 @@ fun PawBerryApp(
             composable(Routes.LOGIN) {
                 LoginScreen(
                     errorMessage = formError,
+                    backendStatus = backendStatus,
+                    isBusy = isBusy,
                     onLogin = { enteredUsername, password ->
                         viewModel.login(enteredUsername, password) {
                             navController.navigate(Routes.HOME) {
@@ -140,6 +162,7 @@ fun PawBerryApp(
                     },
                     onBackToLogin = { navController.popBackStack() },
                     onClearError = viewModel::clearFormError,
+                    isBusy = isBusy,
                 )
             }
 
@@ -157,6 +180,7 @@ fun PawBerryApp(
             composable(Routes.MY_PETS) {
                 MyPetsScreen(
                     pets = pets,
+                    imageBaseUrl = imageBaseUrl,
                     onPetClick = { petId -> navController.navigate(Routes.petProfile(petId)) },
                     onAddPet = { navController.navigate(Routes.ADD_PET) },
                 )
@@ -167,21 +191,22 @@ fun PawBerryApp(
                     title = "Add a pet",
                     submitLabel = "Add Pet",
                     errorMessage = formError,
-                    onSubmit = { name, breed, dob, toy ->
-                        viewModel.addPet(name, breed, dob, toy) {
+                    onSubmit = { name, species, breed, dob, toy, gender, imageUri ->
+                        viewModel.addPet(name, species, breed, dob, toy, gender, imageUri) {
                             navController.popBackStack()
                         }
                     },
                     onCancel = { navController.popBackStack() },
                     onClearError = viewModel::clearFormError,
+                    isBusy = isBusy,
                 )
             }
 
             composable(
                 route = Routes.PET_PROFILE,
-                arguments = listOf(navArgument(Routes.PET_ID_ARG) { type = NavType.LongType }),
+                arguments = listOf(navArgument(Routes.PET_ID_ARG) { type = NavType.StringType }),
             ) { backStackEntry ->
-                val petId = backStackEntry.arguments?.getLong(Routes.PET_ID_ARG) ?: return@composable
+                val petId = backStackEntry.arguments?.getString(Routes.PET_ID_ARG) ?: return@composable
                 val pet = pets.firstOrNull { it.petId == petId }
                 val countByCategory = reminders
                     .filter { it.reminder.petId == petId }
@@ -190,48 +215,61 @@ fun PawBerryApp(
 
                 PetProfileScreen(
                     pet = pet,
+                    imageBaseUrl = imageBaseUrl,
                     reminderCountByCategory = countByCategory,
                     onCategoryClick = { category ->
                         navController.navigate(Routes.petCategory(petId, category.name))
                     },
                     onEditPet = { navController.navigate(Routes.editPet(petId)) },
+                    onDeletePet = {
+                        if (pet != null) {
+                            viewModel.deletePet(pet) {
+                                navController.popBackStack()
+                            }
+                        }
+                    },
                     onBack = { navController.popBackStack() },
+                    isBusy = isBusy,
                 )
             }
 
             composable(
                 route = Routes.EDIT_PET,
-                arguments = listOf(navArgument(Routes.PET_ID_ARG) { type = NavType.LongType }),
+                arguments = listOf(navArgument(Routes.PET_ID_ARG) { type = NavType.StringType }),
             ) { backStackEntry ->
-                val petId = backStackEntry.arguments?.getLong(Routes.PET_ID_ARG) ?: return@composable
+                val petId = backStackEntry.arguments?.getString(Routes.PET_ID_ARG) ?: return@composable
                 val pet = pets.firstOrNull { it.petId == petId } ?: return@composable
 
                 PetFormScreen(
                     title = "Edit ${pet.name}",
                     submitLabel = "Save Changes",
                     errorMessage = formError,
-                    onSubmit = { name, breed, dob, toy ->
-                        viewModel.updatePet(pet, name, breed, dob, toy) {
+                    onSubmit = { name, species, breed, dob, toy, gender, imageUri ->
+                        viewModel.updatePet(pet, name, species, breed, dob, toy, gender, imageUri) {
                             navController.popBackStack()
                         }
                     },
                     onCancel = { navController.popBackStack() },
                     onClearError = viewModel::clearFormError,
                     initialName = pet.name,
+                    initialSpecies = pet.species,
                     initialBreed = pet.breed,
                     initialDateOfBirth = pet.dateOfBirth,
                     initialFavoriteToy = pet.favoriteToy,
+                    initialGender = pet.gender,
+                    initialImageUrl = pet.imageUrl(imageBaseUrl),
+                    isBusy = isBusy,
                 )
             }
 
             composable(
                 route = Routes.PET_CATEGORY,
                 arguments = listOf(
-                    navArgument(Routes.PET_ID_ARG) { type = NavType.LongType },
+                    navArgument(Routes.PET_ID_ARG) { type = NavType.StringType },
                     navArgument(Routes.CATEGORY_ARG) { type = NavType.StringType },
                 ),
             ) { backStackEntry ->
-                val petId = backStackEntry.arguments?.getLong(Routes.PET_ID_ARG) ?: return@composable
+                val petId = backStackEntry.arguments?.getString(Routes.PET_ID_ARG) ?: return@composable
                 val category = ReminderCategory.fromStored(
                     backStackEntry.arguments?.getString(Routes.CATEGORY_ARG).orEmpty()
                 )
@@ -245,10 +283,12 @@ fun PawBerryApp(
                     category = category,
                     reminders = categoryReminders,
                     onCompletedChange = viewModel::setReminderCompleted,
+                    onDeleteReminder = viewModel::deleteReminder,
                     onAddReminder = {
                         navController.navigate(Routes.addReminder(petId, category.name))
                     },
                     onBack = { navController.popBackStack() },
+                    isBusy = isBusy,
                 )
             }
 
@@ -256,7 +296,9 @@ fun PawBerryApp(
                 RemindersScreen(
                     reminders = reminders,
                     onCompletedChange = viewModel::setReminderCompleted,
+                    onDeleteReminder = viewModel::deleteReminder,
                     onAddReminder = { navController.navigate(Routes.addReminder()) },
+                    isBusy = isBusy,
                 )
             }
 
@@ -264,8 +306,8 @@ fun PawBerryApp(
                 route = Routes.ADD_REMINDER,
                 arguments = listOf(
                     navArgument(Routes.PET_ID_ARG) {
-                        type = NavType.LongType
-                        defaultValue = NO_PET_ID
+                        type = NavType.StringType
+                        defaultValue = ""
                     },
                     navArgument(Routes.CATEGORY_ARG) {
                         type = NavType.StringType
@@ -274,8 +316,8 @@ fun PawBerryApp(
                 ),
             ) { backStackEntry ->
                 val arguments = backStackEntry.arguments
-                val preselectedPetId = arguments?.getLong(Routes.PET_ID_ARG)
-                    ?.takeIf { it != NO_PET_ID }
+                val preselectedPetId = arguments?.getString(Routes.PET_ID_ARG)
+                    ?.takeIf { it.isNotEmpty() }
                 val preselectedCategory = arguments?.getString(Routes.CATEGORY_ARG)
                     ?.takeIf { it.isNotEmpty() }
                     ?.let { ReminderCategory.fromStored(it) }
@@ -283,8 +325,8 @@ fun PawBerryApp(
                 AddReminderScreen(
                     pets = pets,
                     errorMessage = formError,
-                    onSave = { petId, title, category, dueDate, dueTime, repeat ->
-                        viewModel.addReminder(petId, title, category, dueDate, dueTime, repeat) {
+                    onSave = { petId, title, category, dueDate, dueTime, recurrence ->
+                        viewModel.addReminder(petId, title, category, dueDate, dueTime, recurrence) {
                             navController.popBackStack()
                         }
                     },
@@ -292,11 +334,10 @@ fun PawBerryApp(
                     onClearError = viewModel::clearFormError,
                     preselectedPetId = preselectedPetId,
                     preselectedCategory = preselectedCategory,
+                    isBusy = isBusy,
                 )
             }
         }
     }
 }
 
-/** Sentinel for "no pet pre-selected" on the optional Add Reminder argument. */
-private const val NO_PET_ID = -1L

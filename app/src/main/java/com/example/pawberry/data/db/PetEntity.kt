@@ -1,27 +1,22 @@
 package com.example.pawberry.data.db
 
-import androidx.room.Entity
-import androidx.room.ForeignKey
-import androidx.room.Index
-import androidx.room.PrimaryKey
-
-@Entity(
-    tableName = "pets",
-    foreignKeys = [
-        ForeignKey(
-            entity = UserEntity::class,
-            parentColumns = ["userId"],
-            childColumns = ["userId"],
-            onDelete = ForeignKey.CASCADE,
-        ),
-    ],
-    indices = [Index("userId")],
-)
 data class PetEntity(
-    @PrimaryKey(autoGenerate = true) val petId: Long = 0,
-    val userId: Long,
+    val petId: String,
+    val userId: String,
     val name: String,
     val breed: String,
     val dateOfBirth: String,
     val favoriteToy: String,
-)
+    val species: String = "",
+    val gender: String = "",
+    val profileImage: String = "",
+) {
+    fun imageUrl(baseUrl: String): String {
+        if (profileImage.isBlank()) return ""
+        if (profileImage.startsWith("http://") || profileImage.startsWith("https://")) {
+            return profileImage
+        }
+        val root = baseUrl.trimEnd('/')
+        return if (profileImage.startsWith("/")) "$root$profileImage" else "$root/$profileImage"
+    }
+}

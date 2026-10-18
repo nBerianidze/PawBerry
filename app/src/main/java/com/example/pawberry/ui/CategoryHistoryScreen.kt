@@ -32,9 +32,11 @@ fun CategoryHistoryScreen(
     petName: String,
     category: ReminderCategory,
     reminders: List<ReminderEntity>,
-    onCompletedChange: (reminderId: Long, completed: Boolean) -> Unit,
+    onCompletedChange: (reminderId: String, completed: Boolean) -> Unit,
+    onDeleteReminder: (reminderId: String, title: String) -> Unit,
     onAddReminder: () -> Unit,
     onBack: () -> Unit,
+    isBusy: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val upcoming = remember(reminders) { reminders.filterNot { it.isCompleted } }
@@ -66,6 +68,8 @@ fun CategoryHistoryScreen(
                         reminder = reminder,
                         petName = null,
                         onCompletedChange = { onCompletedChange(reminder.reminderId, it) },
+                        onDelete = { onDeleteReminder(reminder.reminderId, reminder.title) },
+                        deleteEnabled = !isBusy,
                     )
                 }
             }
@@ -79,6 +83,8 @@ fun CategoryHistoryScreen(
                         reminder = reminder,
                         petName = null,
                         onCompletedChange = { onCompletedChange(reminder.reminderId, it) },
+                        onDelete = { onDeleteReminder(reminder.reminderId, reminder.title) },
+                        deleteEnabled = !isBusy,
                     )
                 }
             }
