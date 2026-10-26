@@ -126,6 +126,8 @@ data class RewardDto(
 
 data class ApiMessage(
     val message: String? = null,
+    val field: String? = null,
+    val code: String? = null,
 )
 
 fun UserDto.toEntity(rewardPoints: Int): UserEntity = UserEntity(

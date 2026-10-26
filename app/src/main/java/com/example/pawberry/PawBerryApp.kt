@@ -57,6 +57,7 @@ fun PawBerryApp(
     val upcomingReminders by viewModel.upcomingReminders.collectAsStateWithLifecycle()
     val rewardPoints by viewModel.rewardPoints.collectAsStateWithLifecycle()
     val formError by viewModel.formError.collectAsStateWithLifecycle()
+    val emailError by viewModel.emailError.collectAsStateWithLifecycle()
     val isBusy by viewModel.isBusy.collectAsStateWithLifecycle()
     val backendStatus by viewModel.backendStatus.collectAsStateWithLifecycle()
     val userMessage by viewModel.userMessage.collectAsStateWithLifecycle()
@@ -145,6 +146,7 @@ fun PawBerryApp(
             composable(Routes.REGISTER) {
                 RegisterScreen(
                     errorMessage = formError,
+                    emailError = emailError,
                     onRegister = { name, surname, newUsername, email, phone, dob, password, confirm ->
                         viewModel.register(
                             name = name,

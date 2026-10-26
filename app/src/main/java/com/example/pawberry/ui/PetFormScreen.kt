@@ -71,23 +71,39 @@ fun PetFormScreen(
     initialGender: String = "",
     initialImageUrl: String = "",
 ) {
-    val predefinedSelected = PetSpecies.displayList().firstOrNull {
-        it.equals(initialSpecies, ignoreCase = true)
-    }
+    val matchedSpecies = PetSpecies.canonical(initialSpecies)
+    val matchedBreed = matchedSpecies?.let { PetSpecies.canonicalBreed(it, initialBreed) }
     var name by rememberSaveable(initialName) { mutableStateOf(initialName) }
     var speciesChoice by rememberSaveable(initialSpecies) {
         mutableStateOf(
             when {
                 initialSpecies.isBlank() -> ""
-                predefinedSelected != null -> predefinedSelected
+                matchedSpecies != null -> matchedSpecies
                 else -> PetSpecies.OTHER
             }
         )
     }
     var customSpecies by rememberSaveable(initialSpecies) {
-        mutableStateOf(if (predefinedSelected == null) initialSpecies else "")
+        mutableStateOf(if (matchedSpecies == null && initialSpecies.isNotBlank()) initialSpecies else "")
     }
-    var breed by rememberSaveable(initialBreed) { mutableStateOf(initialBreed) }
+    var breedChoice by rememberSaveable(initialSpecies, initialBreed) {
+        mutableStateOf(
+            when {
+                matchedSpecies == null || initialBreed.isBlank() -> ""
+                matchedBreed != null -> matchedBreed
+                else -> PetSpecies.OTHER
+            }
+        )
+    }
+    var customBreed by rememberSaveable(initialSpecies, initialBreed) {
+        mutableStateOf(
+            when {
+                matchedSpecies == null -> initialBreed
+                matchedBreed == null && initialBreed.isNotBlank() -> initialBreed
+                else -> ""
+            }
+        )
+    }
     var dateOfBirth by rememberSaveable(initialDateOfBirth) { mutableStateOf(initialDateOfBirth) }
     var favoriteToy by rememberSaveable(initialFavoriteToy) { mutableStateOf(initialFavoriteToy) }
     var gender by rememberSaveable(initialGender) {
@@ -163,9 +179,13 @@ fun PetFormScreen(
                 label = "Species",
                 options = PetSpecies.displayList(),
                 selected = speciesChoice,
-                onSelected = {
-                    speciesChoice = it
-                    if (it != PetSpecies.OTHER) customSpecies = ""
+                onSelected = { selected ->
+                    if (!selected.equals(speciesChoice, ignoreCase = true)) {
+                        breedChoice = ""
+                        customBreed = ""
+                    }
+                    speciesChoice = selected
+                    if (selected != PetSpecies.OTHER) customSpecies = ""
                     onClearError()
                 },
                 placeholder = "Select a species",
@@ -183,6 +203,35 @@ fun PetFormScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
+            if (speciesChoice.isNotBlank() && speciesChoice != PetSpecies.OTHER) {
+                Spacer(modifier = Modifier.height(12.dp))
+                SearchablePickerField(
+                    label = "Breed",
+                    options = PetSpecies.breedsFor(speciesChoice),
+                    selected = breedChoice,
+                    onSelected = { selected ->
+                        breedChoice = selected
+                        if (selected != PetSpecies.OTHER) customBreed = ""
+                        onClearError()
+                    },
+                    placeholder = "Select a breed",
+                )
+            }
+            if (speciesChoice == PetSpecies.OTHER || breedChoice == PetSpecies.OTHER) {
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = customBreed,
+                    onValueChange = {
+                        customBreed = it
+                        onClearError()
+                    },
+                    label = {
+                        Text(if (speciesChoice == PetSpecies.OTHER) "Breed" else "Custom breed")
+                    },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             Spacer(modifier = Modifier.height(12.dp))
             DropdownField(
                 label = "Gender",
@@ -194,17 +243,6 @@ fun PetFormScreen(
                     onClearError()
                 },
                 placeholder = "Select gender",
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            OutlinedTextField(
-                value = breed,
-                onValueChange = {
-                    breed = it
-                    onClearError()
-                },
-                label = { Text("Breed") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
             )
             Spacer(modifier = Modifier.height(12.dp))
             DatePickerField(
@@ -236,6 +274,11 @@ fun PetFormScreen(
                         customSpecies.trim()
                     } else {
                         speciesChoice
+                    }
+                    val breed = when {
+                        speciesChoice == PetSpecies.OTHER || breedChoice == PetSpecies.OTHER ->
+                            customBreed.trim()
+                        else -> breedChoice.trim()
                     }
                     onSubmit(
                         name,

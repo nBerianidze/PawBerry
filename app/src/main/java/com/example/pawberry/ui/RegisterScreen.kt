@@ -28,6 +28,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.pawberry.ui.components.DatePickerField
 import com.example.pawberry.ui.components.FormErrorText
+import com.example.pawberry.util.EmailValidator
 
 @Composable
 fun RegisterScreen(
@@ -44,6 +45,7 @@ fun RegisterScreen(
     ) -> Unit,
     onBackToLogin: () -> Unit,
     onClearError: () -> Unit,
+    emailError: String? = null,
     isBusy: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
@@ -55,6 +57,7 @@ fun RegisterScreen(
     var dateOfBirth by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var confirmPassword by rememberSaveable { mutableStateOf("") }
+    val emailFieldError = EmailValidator.liveFormatError(email) ?: emailError
 
     Column(
         modifier = modifier
@@ -111,6 +114,12 @@ fun RegisterScreen(
                 onClearError()
             },
             label = { Text("Email") },
+            isError = emailFieldError != null,
+            supportingText = if (emailFieldError == null) {
+                null
+            } else {
+                { Text(emailFieldError) }
+            },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
             modifier = Modifier.fillMaxWidth(),

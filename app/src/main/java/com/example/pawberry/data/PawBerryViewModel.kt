@@ -17,7 +17,9 @@ import com.example.pawberry.data.remote.ApiConfig
 import com.example.pawberry.data.remote.BackendConnectionState
 import com.example.pawberry.data.remote.BaseUrlInterceptor
 import com.example.pawberry.data.remote.SessionStore
+import com.example.pawberry.data.remote.toApiError
 import com.example.pawberry.data.remote.toUserMessage
+import com.example.pawberry.util.EmailValidator
 import com.example.pawberry.data.repository.PetRepository
 import com.example.pawberry.data.repository.ReminderRepository
 import com.example.pawberry.data.repository.UserRepository
@@ -51,6 +53,9 @@ class PawBerryViewModel(
     private val _formError = MutableStateFlow<String?>(null)
     val formError: StateFlow<String?> = _formError.asStateFlow()
 
+    private val _emailError = MutableStateFlow<String?>(null)
+    val emailError: StateFlow<String?> = _emailError.asStateFlow()
+
     private val _userMessage = MutableStateFlow<String?>(null)
     val userMessage: StateFlow<String?> = _userMessage.asStateFlow()
 
@@ -76,6 +81,7 @@ class PawBerryViewModel(
 
     fun clearFormError() {
         _formError.value = null
+        _emailError.value = null
     }
 
     fun clearUserMessage() {
@@ -130,6 +136,8 @@ class PawBerryViewModel(
     ) {
         val trimmedUsername = username.trim()
         val trimmedEmail = email.trim()
+        val emailProblem = EmailValidator.formatError(trimmedEmail)
+        _emailError.value = emailProblem
 
         if (name.isBlank() || surname.isBlank() || trimmedUsername.isEmpty() ||
             trimmedEmail.isEmpty() || phoneNumber.isBlank() || dateOfBirth.isBlank() ||
@@ -138,8 +146,8 @@ class PawBerryViewModel(
             _formError.value = "Please fill in all required fields."
             return
         }
-        if (!trimmedEmail.contains("@") || !trimmedEmail.substringAfterLast("@").contains(".")) {
-            _formError.value = "Please enter a valid email address."
+        if (emailProblem != null) {
+            _formError.value = null
             return
         }
         if (trimmedUsername.length < MIN_USERNAME_LENGTH) {
@@ -168,9 +176,16 @@ class PawBerryViewModel(
                 )
                 sessionStore.clear()
                 _formError.value = null
+                _emailError.value = null
                 onSuccess()
             } catch (error: Exception) {
-                _formError.value = error.toUserMessage()
+                val apiError = error.toApiError()
+                if (apiError.field == "email") {
+                    _emailError.value = apiError.message
+                    _formError.value = null
+                } else {
+                    _formError.value = apiError.message
+                }
             }
         }
     }
@@ -182,6 +197,7 @@ class PawBerryViewModel(
         _pets.value = emptyList()
         _reminders.value = emptyList()
         _formError.value = null
+        _emailError.value = null
     }
 
     fun addPet(
